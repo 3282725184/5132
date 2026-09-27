@@ -1,60 +1,114 @@
 #include "reg52.h"
-#include <intrins.h>
+#include "delay.h"
 #include "uart.h"
-#include "Delay.h"
 #include "main.h"
-#include "oled.h"
+#include <string.h>
 
-unsigned char recev;
-unsigned int count;
+unsigned char recv;
+char esp_recv_buf[15] = {0};
+char esp_flag = 1;
 
 void main()
-	
 {
-	//UART_Init();
 	
-	OLED_Init();			//初始化OLED  
-	OLED_Clear(); 
+	Delay_Xms(1000);
+	UART_Init();
+	
+	do
+	{
+		UART_Send_Str("AT+CWMODE=3\r\n");
+		Delay_Xms(500);
+	}while(esp_flag);
+	
+	esp_flag = 1;
+	
+	do
+	{
+		UART_Send_Str("AT+CWJAP=\"HONOR 200\",\"514381curry\"\r\n");
+		Delay_Xms(1000);
+	}while(esp_flag);	
+	
+	esp_flag = 1;
+	
+	do
+	{
+		UART_Send_Str("AT+CIPSTART=\"TCP\",\"10.219.230.146\",5132\r\n");
+		Delay_Xms(1000);
+	}while(esp_flag);	
+	
+	esp_flag = 1;	
 
-//	OLED_ShowCHinese(0+15,0,0);//中
-//	OLED_ShowCHinese(18+15,0,1);//景
-//	OLED_ShowCHinese(36+15,0,2);//园
-//	OLED_ShowCHinese(54+15,0,3);//电
-//	OLED_ShowCHinese(72+15,0,4);//子
-//	OLED_ShowCHinese(90,0,5);//科
-//	OLED_ShowCHinese(108,0,6);//技
+	do
+	{
+		UART_Send_Str("AT+CIPSEND=5\r\n");
+		Delay_Xms(1000);
+	}while(esp_flag);	
 	
-	OLED_ShowCHinese(0,0,0);//中
-	OLED_ShowCHinese(18,0,1);//景
-	OLED_ShowCHinese(36,0,2);//园
-	OLED_ShowCHinese(54,0,3);//电
-	OLED_ShowCHinese(72,0,4);//子	
-	OLED_ShowCHinese(90,0,5);//中
-	
-	OLED_ShowCHinese(0,2,6);//景
-	OLED_ShowCHinese(18,2,7);//园
-	OLED_ShowCHinese(36,2,8);//电
-	OLED_ShowCHinese(54,2,9);//子
-	OLED_ShowCHinese(72,2,10);//科
-	OLED_ShowCHinese(90,2,11);//技
+
+	UART_Send_Str("CURRY\r\n");
 	
 	while(1)
-	{
-		//OLED_Clear();
-//		OLED_ShowCHinese(0+15,0,0);//中
-//		OLED_ShowCHinese(18+15,0,1);//景
-//		OLED_ShowCHinese(36+15,0,2);//园
-//		OLED_ShowCHinese(54+15,0,3);//电
-//		OLED_ShowCHinese(72+15,0,4);//子
-//		OLED_ShowCHinese(90,0,5);//科
-//		OLED_ShowCHinese(108,0,6);//技
-		//OLED_ShowString(6,3,"wo shi li  ",16);
-		OLED_ShowString(0,6,"study:",16);  
-		OLED_ShowString(63,6,"lern:",16);  
-		OLED_ShowChar(48,6,'d',16);//显示ASCII字符	
+	{	
+		Delay_Xms(1000);
 	
-		OLED_ShowNum(103,6,8,3,16);//显示ASCII字符的码值
-
-		Delay_xms(1000);
 	}
+}
+
+void UART_Routine(void) interrupt 4
+{
+	static char recv_count = 0;
+	
+	if(RI == 1)
+	{
+		RI = 0;
+		recv = SBUF;
+		
+		if(recv == 'O' || recv == '+')
+		{
+			memset(esp_recv_buf,'\0',sizeof(esp_recv_buf));
+			recv_count = 0;
+			esp_recv_buf[recv_count] = recv;
+		}
+		else
+		{
+			recv_count++;
+			esp_recv_buf[recv_count] = recv;
+		}
+		
+		if(esp_recv_buf[0] == 'O' && esp_recv_buf[1] == 'K')
+		{
+			esp_flag = 0;
+			memset(esp_recv_buf,'\0',sizeof(esp_recv_buf));
+		}
+		
+		if(esp_recv_buf[0] == '+' && esp_recv_buf[3] == 'D')
+		{
+			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='1'&& esp_recv_buf[11]=='0')
+			{
+				LED1 = 0;	
+			}
+			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='1'&& esp_recv_buf[11]=='1')
+			{
+				LED1 = 1;	
+			}			
+			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='2'&& esp_recv_buf[11]=='0')
+			{
+				LED2 = 0;	
+			}
+			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='2'&& esp_recv_buf[11]=='1')
+			{
+				LED2 = 1;	
+			}			
+			if(esp_recv_buf[7]=='B' && esp_recv_buf[10]=='P'&& esp_recv_buf[11]=='0')
+			{
+				BEEP = 0;	
+			}
+			if(esp_recv_buf[7]=='B' && esp_recv_buf[10]=='P'&& esp_recv_buf[11]=='1')
+			{
+				BEEP = 1;	
+			}
+		}		
+		recv_count = recv_count % 14;
+	}
+
 }
