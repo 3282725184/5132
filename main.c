@@ -1,114 +1,110 @@
 #include "reg52.h"
-#include "delay.h"
-#include "uart.h"
-#include "main.h"
-#include <string.h>
+#include <intrins.h>
 
-unsigned char recv;
-char esp_recv_buf[15] = {0};
-char esp_flag = 1;
+typedef unsigned char uchar;
+typedef unsigned int uint;
 
-void main()
+sbit LED1 = P1^0;
+sbit LED2 = P1^1;
+sbit LED3 = P1^2;
+sbit LED4 = P1^3;
+sbit BEEP = P1^6;
+sbit JDQ1 = P2^0;
+
+uchar recv;
+
+void Delay_xms(uint xms)	//@11.0592MHz
 {
-	
-	Delay_Xms(1000);
-	UART_Init();
-	
-	do
+	uchar data i, j;
+	while(xms)
 	{
-		UART_Send_Str("AT+CWMODE=3\r\n");
-		Delay_Xms(500);
-	}while(esp_flag);
-	
-	esp_flag = 1;
-	
-	do
-	{
-		UART_Send_Str("AT+CWJAP=\"HONOR 200\",\"514381curry\"\r\n");
-		Delay_Xms(1000);
-	}while(esp_flag);	
-	
-	esp_flag = 1;
-	
-	do
-	{
-		UART_Send_Str("AT+CIPSTART=\"TCP\",\"10.219.230.146\",5132\r\n");
-		Delay_Xms(1000);
-	}while(esp_flag);	
-	
-	esp_flag = 1;	
-
-	do
-	{
-		UART_Send_Str("AT+CIPSEND=5\r\n");
-		Delay_Xms(1000);
-	}while(esp_flag);	
-	
-
-	UART_Send_Str("CURRY\r\n");
-	
-	while(1)
-	{	
-		Delay_Xms(1000);
-	
+		_nop_();
+		i = 2;
+		j = 199;
+		do
+		{
+			while (--j);
+		} while (--i);
+    xms--;		
 	}
+} 
+//串口发送一个字节
+void UART_Send_Byte(uchar send_byte)
+{
+	SBUF = send_byte;
+	while(!TI);
+	TI=0;
 }
 
+//串口发送字符串
+void UART_Send_Str(uchar *send_str)
+{	
+	while(*send_str != '\0') //判断字符串结束符，如果识别到‘\0',则跳出while，结束发送
+	{
+		UART_Send_Byte(*send_str++);	//本质是一个字节一个字节的发送，
+		//发送完一个字节，地址+1，等待发送下一个字节，直到检测到字符串结束符为止
+	}	
+} 
+void main()
+{
+	SCON = 0x50; 	//串口配成工作方式1
+	PCON &= 0x7F; //波特率不加倍
+	TMOD &= 0x0f;	
+	TMOD |= 0x20;	//定时器1，模式二，自动重装初值，串口按照一定速率发数据，需要用的定时器
+	TH1 = 0xFD;	
+	TL1 = 0xFD; //@11.0592MH时钟，9600比特率定时器初值
+	TR1 = 1; //定时器开始运行   
+	ES = 1;  //串口中断打开
+	EA=1;					//总中断打开
+
+	while(1)
+  {
+		UART_Send_Str("I am wfeng!\r\n");
+		Delay_xms(1000);
+  }
+}
+
+/*****************
+串口中断处理函数，接收数据
+*****************/
 void UART_Routine(void) interrupt 4
 {
-	static char recv_count = 0;
-	
-	if(RI == 1)
+	if(1 == RI) //判断接收标志位是否为1
 	{
-		RI = 0;
-		recv = SBUF;
-		
-		if(recv == 'O' || recv == '+')
+		RI = 0;  //RI接收标志位清0
+		recv = SBUF;   //接收数据
+		switch (recv)
 		{
-			memset(esp_recv_buf,'\0',sizeof(esp_recv_buf));
-			recv_count = 0;
-			esp_recv_buf[recv_count] = recv;
+			case 0x1:
+				LED1 = 0;
+				break;
+			case 0x2:
+				LED2 = 0;				
+				break;
+			case 0x3:
+				LED3 = 0;
+				break;
+			case 0x4:
+				LED4 = 0;				
+				break;	
+			case 0x5:
+				P1 |= 0x0F;
+				break;
+			case 0x6:
+				BEEP = 0;				
+				break;
+			case 0x7:
+				BEEP = 1;
+				break;
+			case 0x8:
+				JDQ1 = 0;				
+				break;
+			case 0x9:
+				JDQ1 = 1;				
+				break;			
+			default:
+				break;
 		}
-		else
-		{
-			recv_count++;
-			esp_recv_buf[recv_count] = recv;
-		}
-		
-		if(esp_recv_buf[0] == 'O' && esp_recv_buf[1] == 'K')
-		{
-			esp_flag = 0;
-			memset(esp_recv_buf,'\0',sizeof(esp_recv_buf));
-		}
-		
-		if(esp_recv_buf[0] == '+' && esp_recv_buf[3] == 'D')
-		{
-			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='1'&& esp_recv_buf[11]=='0')
-			{
-				LED1 = 0;	
-			}
-			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='1'&& esp_recv_buf[11]=='1')
-			{
-				LED1 = 1;	
-			}			
-			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='2'&& esp_recv_buf[11]=='0')
-			{
-				LED2 = 0;	
-			}
-			if(esp_recv_buf[7]=='L' && esp_recv_buf[10]=='2'&& esp_recv_buf[11]=='1')
-			{
-				LED2 = 1;	
-			}			
-			if(esp_recv_buf[7]=='B' && esp_recv_buf[10]=='P'&& esp_recv_buf[11]=='0')
-			{
-				BEEP = 0;	
-			}
-			if(esp_recv_buf[7]=='B' && esp_recv_buf[10]=='P'&& esp_recv_buf[11]=='1')
-			{
-				BEEP = 1;	
-			}
-		}		
-		recv_count = recv_count % 14;
 	}
 
 }
